@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express"; // Pour installer les types d'Express : npm i --save-dev @types/express -w api 
 import { router } from "./routers/index.router.js";
 import { config } from "../server.config.js";
-// import { globalErrorHandler } from "./middlewares/global-error-handler.js";
+import { globalErrorHandler } from "./middlewares/global-error-handler.js";
 // import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 // import { infoMiddleware } from "./middlewares/info.middleware.js";
  import cookieParser from "cookie-parser";
@@ -41,4 +41,4 @@ app.use("/api", router);
 // app.use(notFoundMiddleware);
 
 // Global error middleware
-// app.use(globalErrorHandler);
+app.use(globalErrorHandler);
