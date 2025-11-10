@@ -4,6 +4,7 @@ import z from "zod";
 import { BadRequestError, ConflictError, UnauthorizedError } from "../lib/errors.js";
 import { prisma } from "../models/index.js";
 import { generateAuthenticationTokens, setAccessTokenCookie, setRefreshTokenCookie, replaceRefreshTokenInDatabase} from "../lib/tokens.js";
+import { Prisma } from '@prisma/client';
 
 const authController = {
     async registerUser(req: Request, res: Response) {
@@ -152,6 +153,7 @@ const authController = {
         const updateProfilBodySchema = z.object({
           firstname: z.string().min(1, "firstname cannot be empty").optional(),
           lastname: z.string().min(1, "lastname cannot be empty").optional(),
+          avatarUrl: z.string().min(1).optional(),
           currentPassword: z.string().optional(),
           newPassword: z.string()
             .min(12, "Password should have minimum length of 12")
@@ -168,6 +170,7 @@ const authController = {
           lastname,
           currentPassword,
           newPassword,
+          avatarUrl
         } = await updateProfilBodySchema.parseAsync(req.body);
         
         // Vérifier qu'on a un utilisateur authentifié (middleware checkRoles doit avoir mis req.userId)
@@ -184,13 +187,9 @@ const authController = {
           throw new UnauthorizedError("JWT payload does not match any user");
         };
         
-        interface Updates {
-          firstname: string;
-          lastname: string;
-          password: string
-        }
+    
         // Construire dynamiquement les champs à mettre à jour
-        const updates = {} as Updates;
+        const updates: Prisma.UserUpdateInput = {};
       
         if (firstname !== undefined) {
           updates.firstname = firstname;
@@ -198,6 +197,9 @@ const authController = {
         if (lastname !== undefined) {
           updates.lastname = lastname;
         };
+        if (avatarUrl !== undefined) {
+          updates.avatarUrl = avatarUrl;
+        }
         
         // Gestion du changement de mot de passe
         if (newPassword !== undefined) {
@@ -224,10 +226,13 @@ const authController = {
         };
         
         // Mise à jour en base
-        const updatedUser = await prisma.user.update(updates);
+        const updatedUser = await prisma.user.update({
+          where: { id: userId },
+          data: updates,
+        });
       
         // On ne renvoie pas le hash du mot de passe
-        const { password, ...safeUser } = updatedUser.get({ plain: true });
+        const { password, ...safeUser } = updatedUser;
       
         res.json(safeUser);
       },
