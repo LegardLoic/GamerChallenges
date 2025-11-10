@@ -1,0 +1,37 @@
+enum Role {
+  member
+  author
+  admin
+}
+
+model User {
+  id Int @id @default(autoincrement())
+
+  firstname String
+  lastname  String
+  email     String  @unique()
+  password  String
+  role      Role    @default(member)
+  avatarUrl String?
+
+  refresh_tokens RefreshToken[] // alias
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("user") // Correspondance entre le model User dans le code et la table "user" dans la BDD
+}
+
+model RefreshToken {
+  id Int @id @default(autoincrement())
+
+  token String
+
+  user    User @relation(fields: [user_id], references: [id]) // Alias
+  user_id Int
+
+  issued_at  DateTime @default(now())
+  expired_at DateTime
+
+  @@map("refresh_token")
+}
