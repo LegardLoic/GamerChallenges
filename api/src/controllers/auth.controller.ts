@@ -142,7 +142,25 @@ const authController = {
         // Récupérer l'utilisteur en BDD (sans son MDP)
         const user = await prisma.user.findUnique({
           where: { id: userId },
-          omit: { password: true }
+          omit: { password: true },
+          include: { 
+            participation: {
+              select: {
+                time: true,
+                video_url: true,
+                comment: true,
+                challenge_id: true 
+              } 
+            }, 
+            challenge: {
+              select: {
+                id: true,
+                name: true,
+                videoUrl: true,
+                description: true
+              } 
+            } 
+          }
         });
         if (! user) { throw new UnauthorizedError("JWT payload does not match any user"); }
       
