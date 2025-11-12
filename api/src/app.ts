@@ -1,11 +1,11 @@
 import cors from "cors";
 import express from "express"; // Pour installer les types d'Express : npm i --save-dev @types/express -w api 
-import { router as apiRouter } from "./routers/index.router.js";
+import { router } from "./routers/index.router.js";
 import { config } from "../server.config.js";
-// import { globalErrorHandler } from "./middlewares/global-error-handler.js";
+import { globalErrorHandler } from "./middlewares/global-error-handler.js";
 // import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 // import { infoMiddleware } from "./middlewares/info.middleware.js";
-// import cookieParser from "cookie-parser";
+ import cookieParser from "cookie-parser";
 // import { xssSanitizer } from "./middlewares/xss-sanitizer.middleware.js";
 // import { helmetMiddlewre } from "./middlewares/helmet.middleware.js";
 // import { loggerMiddleware } from "./middlewares/logger.middleware.js";
@@ -17,7 +17,7 @@ export const app = express();
 app.use(cors({ origin: config.server.allowedOrigins }));
 
 // Cookie parser
-// app.use(cookieParser());
+ app.use(cookieParser());
 
 // Body parser pour récupérer les body "application/json" dans req.body
 app.use(express.json());
@@ -32,7 +32,7 @@ app.use(express.json());
 // app.use(loggerMiddleware);
 
 // Brancher le routeur de l'API
-app.use("/api", apiRouter);
+app.use("/api", router);
 
 // Info route
 // app.get("/info", infoMiddleware);
@@ -41,4 +41,4 @@ app.use("/api", apiRouter);
 // app.use(notFoundMiddleware);
 
 // Global error middleware
-// app.use(globalErrorHandler);
+app.use(globalErrorHandler);

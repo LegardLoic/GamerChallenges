@@ -1,0 +1,120 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+enum Role {
+  member
+  author
+  admin
+}
+
+model User {
+  id Int @id @default(autoincrement())
+
+  firstname String
+  lastname  String
+  email     String  @unique()
+  password  String
+  role      Role    @default(member)
+  avatarUrl String?
+
+  refresh_tokens RefreshToken[] // alias
+
+  participation Participation[] // Alias
+
+  challenge Challenge[] // Alias
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("user") // Correspondance entre le model User dans le code et la table "user" dans la BDD
+}
+
+model RefreshToken {
+  id Int @id @default(autoincrement())
+
+  token String
+
+  user    User @relation(fields: [user_id], references: [id]) // Alias
+  user_id Int
+
+  issued_at  DateTime @default(now())
+  expired_at DateTime
+
+  @@map("refresh_token")
+}
+
+model Challenge {
+  id Int @id @default(autoincrement())
+
+  name String
+  videoUrl String
+  description String
+
+  participation Participation[] // Alias
+
+  videogame Videogame @relation(fields: [videogame_id], references: [id]) // Alias
+  videogame_id Int
+
+  categorie Categorie @relation(fields: [categorie_id], references: [id]) // Alias
+  categorie_id Int
+
+  user User @relation(fields: [user_id], references: [id]) // Alias
+  user_id Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("challenge")
+}
+
+model Participation {
+
+  time String
+  video_url String
+  comment String
+
+  user User @relation(fields: [user_id], references: [id]) // Alias
+  user_id Int
+
+  challenge Challenge @relation(fields: [challenge_id], references: [id]) // Alias
+  challenge_id Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+
+  @@id(name: "participation_pkey", fields: [user_id, challenge_id])
+  @@map("participation")
+}
+
+model Videogame {
+
+  id Int @id @default(autoincrement())
+
+  name String
+  genre String
+  img_url String
+
+  challenge Challenge[] // Alias
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("videogame")
+}
+
+model Categorie {
+
+  id Int @id @default(autoincrement())
+
+  name String
+
+  challenge Challenge[] // Alias
+
+  @@map("categorie")
+}
