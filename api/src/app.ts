@@ -14,7 +14,7 @@ import { globalErrorHandler } from "./middlewares/global-error-handler.js";
 export const app = express();
 
 // Autoriser les requêtes cross-origin
-app.use(cors({ origin: config.server.allowedOrigins }));
+app.use(cors({ origin: config.server.allowedOrigins, credentials: true }));
 
 // Cookie parser
  app.use(cookieParser());
