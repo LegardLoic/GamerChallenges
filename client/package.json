@@ -9,6 +9,7 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
+		"@types/node": "^24.10.0",
 		"axios": "^1.11.0",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
@@ -25,4 +26,3 @@
 		"vite": "^7.1.2"
 	}
 }
-
