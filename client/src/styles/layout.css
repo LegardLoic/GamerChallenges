@@ -1,0 +1,9 @@
+.body {
+    min-height: 100vh;
+}
+
+.main {
+    max-height: 73vh;
+    overflow: scroll;
+    overflow-x: hidden;
+}
