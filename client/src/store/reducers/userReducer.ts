@@ -1,7 +1,7 @@
 import { createAsyncThunk, createReducer } from "@reduxjs/toolkit";
 
 import { axiosInstance } from "@/api/axiosInstance";
-import type { IUser, IUserChangePassword, IUserResetPassword } from "@/@types/user";
+import type { IloginFormData, IUser, IUserChangePassword, IUserResetPassword } from "@/@types/user";
 import type { AxiosError } from "axios";
 
 // **********************************************************************************
@@ -27,14 +27,11 @@ export const initialState : UserState = {
 // **********************************************************************************
 
 // LOGIN
-export const login = createAsyncThunk<IUser, FormData, { rejectValue: string }>(
+export const login = createAsyncThunk<IUser, IloginFormData, { rejectValue: string }>(
   "auth/login",
   async (formData, { rejectWithValue }) => {
     try {
-      const objData = Object.fromEntries(formData);
-      console.log("objData ::>>>>", objData);
-
-      const { data } = await axiosInstance.post("/auth/login", objData);
+      const { data } = await axiosInstance.post("/auth/login", formData);
       console.log("data :LOGIN:", data);
       return data.user as IUser;
       

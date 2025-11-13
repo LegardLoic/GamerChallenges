@@ -8,6 +8,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useEffect, useState } from 'react'
 import { getUserInfo } from '@/store/reducers/userReducer'
 import type { RootState, AppDispatch } from "@/store";
+import AccountPage from '@/pages/AccountPage/AccountPage'
 export default function App (){
     
     const dispatch = useDispatch<AppDispatch>();
@@ -34,6 +35,7 @@ export default function App (){
             <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/account" element={<AccountPage />} />
             </Routes>
         </Layout>
     )

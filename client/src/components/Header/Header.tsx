@@ -1,7 +1,12 @@
 import { NavLink } from "react-router";
 import "../../styles/header.css"
+import { useSelector } from "react-redux";
+import type { RootState } from "@/store";
 
 export default function Header () {
+    const { isAuth, userInfo, loading } = useSelector(
+        (store: RootState) => store.userStore
+    );
     return (
         <nav className="navbar navbar-expand-lg bg-body-header text-white">
             <div className="container-fluid">
@@ -36,21 +41,66 @@ export default function Header () {
                             <a className="nav-link text-white" href="#">autres</a>
                         </li>
                     </ul>
+                    
+                    <p></p>
                     <div className="nav-item dropdown me-5">
                         <a className="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Mon Compte
                         </a>
+                        
                         <ul className="dropdown-menu">
-                            <li>
-                                <NavLink
-                                    to={`/login`}
-                                    end
-                                    className={'dropdown-item'}
-                                >
-                                    Connexion
-                                </NavLink>
-                            </li>
-                            <li><a className="dropdown-item" href="#">Inscription</a></li>
+                            {loading ? (
+                                <p>chargement</p>
+                              ) : !isAuth ? (
+                                <>
+                                  <li>
+                                    <NavLink
+                                      to={`/login`}
+                                      end
+                                      className={'dropdown-item'}
+                                    >
+                                      Connexion
+                                    </NavLink>
+                                  </li>
+                                  <li>
+                                    <NavLink
+                                      to={`/register`}
+                                      end
+                                      className={'dropdown-item'}
+                                    >
+                                      inscription
+                                    </NavLink>
+                                  </li> 
+                                </>
+                                 
+                              ) : (
+                                <>
+                                  <li>
+                                    <p className="dropdown-item">Hello {userInfo?.firstname}</p>
+                                  </li>
+                                  <li><hr className="dropdown-divider"/></li>
+                                  <li>
+                                    <NavLink
+                                      to={`/account`}
+                                      end
+                                      className={'dropdown-item'}
+                                    >
+                                      Mon compte
+                                    </NavLink>
+                                  </li>
+                                  <li>
+                                    <NavLink
+                                      to={`/logout`}
+                                      end
+                                      className={'dropdown-item'}
+                                    >
+                                      Deconnexion
+                                    </NavLink>
+                                  </li> 
+                                </>
+                              )
+                            }
+                            
                             {/* <li><hr className="dropdown-divider"/></li>
                             <li><a className="dropdown-item" href="#">Something else here</a></li> */}
                         </ul>

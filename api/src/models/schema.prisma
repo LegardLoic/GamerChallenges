@@ -8,7 +8,7 @@ generator client {
 }
 enum Role {
   member
-  author
+  creator
   admin
 }
 
@@ -52,7 +52,8 @@ model Challenge {
   id Int @id @default(autoincrement())
 
   name String
-  videoUrl String
+  img_url String
+  video_url String
   description String
 
   participation Participation[] // Alias

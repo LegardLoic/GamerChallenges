@@ -68,7 +68,28 @@ const authController = {
         const { email, password } = await loginUserBodySchema.parseAsync(req.body);
       
         // Récupérer le user dans la BDD (si pas de user -> 401 Unauthorized)
-        const user = await prisma.user.findFirst({ where: { email } });
+        const user = await prisma.user.findFirst({ 
+          where: { email },
+          include: { 
+            participation: {
+              select: {
+                time: true,
+                video_url: true,
+                comment: true,
+                challenge_id: true 
+              } 
+            }, 
+            challenge: {
+              select: {
+                id: true,
+                name: true,
+                img_url: true,
+                video_url: true,
+                description: true
+              } 
+            } 
+          }
+        });
         if (! user) {
           throw new UnauthorizedError("Email and password do not match");
         }
@@ -88,9 +109,11 @@ const authController = {
         // Ajouter les tokens aux cookies (via headers)
         setAccessTokenCookie(res, accessToken);
         setRefreshTokenCookie(res, refreshToken);
+
+        const {password: _pw, ...safeUser} = user
       
         // Répondre au client, on place également le JWT dans la réponse
-        res.json({ accessToken, refreshToken });
+        res.status(200).json({ user: safeUser });
       },
       
       async logoutUser(_: Request, res: Response) {
@@ -156,7 +179,8 @@ const authController = {
               select: {
                 id: true,
                 name: true,
-                videoUrl: true,
+                img_url: true,
+                video_url: true,
                 description: true
               } 
             } 

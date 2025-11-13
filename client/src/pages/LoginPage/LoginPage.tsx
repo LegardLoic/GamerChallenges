@@ -1,16 +1,40 @@
+import { useDispatch } from 'react-redux'
+import { login } from "@/store/reducers/userReducer";
+import { useNavigate } from 'react-router';
+import type { AppDispatch } from '@/store';
+import type { IloginFormData } from '@/@types/user';
+
+
+
 export default function LoginPage () {
+
+    const dispatch = useDispatch<AppDispatch>();
+    const navigate = useNavigate();
+
+    async function submitForm(data: IloginFormData){
+        const result = await dispatch(login(data));
+        if (login.fulfilled.match(result)) {
+            navigate("/");
+        }
+    }
     return (
         <div className="container">
             <h2>Login</h2>
-            <form>
+            <form action={(formData) => {
+                const loginFormData = {
+                    email: formData.get("email") as string,
+                    password: formData.get("password") as string
+                }
+                submitForm(loginFormData)
+            }}>
                 <div className="mb-3">
-                    <label htmlFor="exampleInputEmail1" className="form-label">Email address</label>
-                    <input type="email" className="form-control" id="exampleInputEmail1" aria-describedby="emailHelp"/>
-                    <div id="emailHelp" className="form-text">We'll never share your email with anyone else.</div>
+                    <label htmlFor="email" className="form-label">Email address</label>
+                    <input type="email" name="email" className="form-control" placeholder="exemple@email.com" id="email" aria-describedby="emailHelp"/>
+                    <div id="emailHelp" className="form-text">Vous ne devez jamais partager votre adresse mail.</div>
                 </div>
                 <div className="mb-3">
-                    <label htmlFor="exampleInputPassword1" className="form-label">Password</label>
-                    <input type="password" className="form-control" id="exampleInputPassword1"/>
+                    <label htmlFor="password" className="form-label">Password</label>
+                    <input type="password" name="password" className="form-control" id="password"/>
                 </div>
                 <div className="mb-3 form-check">
                     <input type="checkbox" className="form-check-input" id="exampleCheck1"/>
