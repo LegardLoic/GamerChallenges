@@ -1,85 +1,125 @@
 #include <Geode/Geode.hpp>
-#include <Geode/modify/EditorUI.hpp>
-#include <Geode/modify/TextGameObject.hpp>
+#include <Geode/modify/GJEffectManager.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-#include <Geode/binding/CreateMenuItem.hpp>
-#include <Geode/binding/EditButtonBar.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/fmod/fmod.hpp>
-#include <filesystem>
-#include <fstream>
-#include <unordered_set>
-#include <thread>
 #include <chrono>
 #include <csignal>
-#include "TriggerCodec.hpp"
-#include "TriggerPopup.hpp"
+#include <thread>
 
 using namespace geode::prelude;
-namespace fs = std::filesystem;
 
-static constexpr int SAVE_BUTTON_ID  = 14991;
-static constexpr int LOAD_BUTTON_ID  = 14992;
-static constexpr int CRASH_BUTTON_ID = 14993;
+static constexpr int LOAD_FLAG_ITEM_ID  = 8885;
+static constexpr int CRASH_FLAG_ITEM_ID = 8886;
+static constexpr int SAVE_FLAG_ITEM_ID  = 8888;
 
-struct RuntimeEntry {
-    geode::Ref<TextGameObject> object;
-    ZptTrigger trigger;
+struct SavedItem {
+    int itemID;
+    int value;
 };
-static std::vector<RuntimeEntry> g_entries;
-static std::unordered_set<TextGameObject*> g_fired;
-static bool g_setupDone = false;
 
-static fs::path valuePath(int id) {
-    return Mod::get()->getSaveDir() / ("persistent-" + std::to_string(id) + ".txt");
-}
+struct SavedItems {
+    std::vector<SavedItem> items;
+};
 
-static std::optional<int> loadValue(int id) {
-    std::ifstream f(valuePath(id), std::ios::binary);
-    if (!f.good()) return std::nullopt;
-    int value = 0;
-    f >> value;
-    if (!f.good() && !f.eof()) return std::nullopt;
-    return value;
-}
-
-static bool saveValueSync(int id, int value) {
-    auto dir = Mod::get()->getSaveDir();
-    std::error_code ec;
-    fs::create_directories(dir, ec);
-    if (ec) return false;
-    auto dst = valuePath(id);
-    auto tmp = dst;
-    tmp += ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f.good()) return false;
-        f << value << "\n";
-        f.flush();
-        if (!f.good()) return false;
+template <>
+struct matjson::Serialize<SavedItem> {
+    static Result<SavedItem> fromJson(matjson::Value const& value) {
+        GEODE_UNWRAP_INTO(int itemID, value["itemID"].asInt());
+        GEODE_UNWRAP_INTO(int val, value["value"].asInt());
+        return Ok(SavedItem{itemID, val});
     }
-    fs::remove(dst, ec);
-    ec.clear();
-    fs::rename(tmp, dst, ec);
-    return !ec;
+
+    static matjson::Value toJson(SavedItem const& value) {
+        matjson::Value obj;
+        obj["itemID"] = value.itemID;
+        obj["value"] = value.value;
+        return obj;
+    }
+};
+
+template <>
+struct matjson::Serialize<SavedItems> {
+    static Result<SavedItems> fromJson(matjson::Value const& value) {
+        GEODE_UNWRAP_INTO(std::vector<SavedItem> items, value["items"].as<std::vector<SavedItem>>());
+        return Ok(SavedItems{items});
+    }
+
+    static matjson::Value toJson(SavedItems const& value) {
+        matjson::Value obj;
+        obj["items"] = value.items;
+        return obj;
+    }
+};
+
+static bool isControlItem(int id) {
+    return id == LOAD_FLAG_ITEM_ID || id == CRASH_FLAG_ITEM_ID || id == SAVE_FLAG_ITEM_ID;
 }
 
-static void tryAudioStutter(int loopMs) {
+static int getItemValue(GJEffectManager* mgr, int itemID) {
+    if (!mgr) return 0;
+    if (auto it = mgr->m_itemCountMap.find(itemID); it != mgr->m_itemCountMap.end())
+        return it->second;
+    return 0;
+}
+
+static std::string saveKey(GJBaseGameLayer* layer) {
+    int levelID = 0;
+    if (layer && layer->m_level) levelID = layer->m_level->m_levelID;
+    return fmt::format("level-{}-items", levelID);
+}
+
+static void saveItemStates(GJBaseGameLayer* layer) {
+    if (!layer || !layer->m_effectManager) return;
+
+    SavedItems data;
+    for (auto const& [itemID, value] : layer->m_effectManager->m_itemCountMap) {
+        if (isControlItem(itemID)) continue;
+        data.items.push_back({itemID, value});
+    }
+
+    Mod::get()->setSavedValue(saveKey(layer), data);
+    auto res = Mod::get()->saveData();
+    if (res.isErr()) {
+        log::error("Persistent Triggers: synchronous save failed: {}", res.unwrapErr());
+    } else {
+        log::info("Persistent Triggers: saved {} item states", data.items.size());
+    }
+}
+
+static void restoreItemStates(GJBaseGameLayer* layer) {
+    if (!layer || !layer->m_effectManager) return;
+
+    auto data = Mod::get()->getSavedValue<SavedItems>(saveKey(layer), SavedItems{});
+    for (auto const& item : data.items) {
+        if (isControlItem(item.itemID)) continue;
+        layer->m_effectManager->updateCountForItem(item.itemID, item.value);
+        layer->updateCounters(item.itemID, item.value);
+    }
+    log::info("Persistent Triggers: restored {} item states", data.items.size());
+}
+
+static void tryAudioStutter(unsigned loopMs = 10) {
     auto engine = FMODAudioEngine::get();
     if (!engine || !engine->m_backgroundMusicChannel) return;
+
     int count = 0;
     if (engine->m_backgroundMusicChannel->getNumChannels(&count) != FMOD_OK || count <= 0) return;
-    FMOD::Channel* ch = nullptr;
-    if (engine->m_backgroundMusicChannel->getChannel(0, &ch) != FMOD_OK || !ch) return;
+
+    FMOD::Channel* channel = nullptr;
+    if (engine->m_backgroundMusicChannel->getChannel(0, &channel) != FMOD_OK || !channel) return;
+
     unsigned pos = 0;
-    if (ch->getPosition(&pos, FMOD_TIMEUNIT_MS) != FMOD_OK) return;
+    if (channel->getPosition(&pos, FMOD_TIMEUNIT_MS) != FMOD_OK) return;
+
     FMOD::Sound* sound = nullptr;
-    if (ch->getCurrentSound(&sound) != FMOD_OK || !sound) return;
-    auto start = pos > static_cast<unsigned>(loopMs) ? pos - static_cast<unsigned>(loopMs) : 0u;
+    if (channel->getCurrentSound(&sound) != FMOD_OK || !sound) return;
+
+    unsigned start = pos > loopMs ? pos - loopMs : 0u;
     sound->setLoopPoints(start, FMOD_TIMEUNIT_MS, pos, FMOD_TIMEUNIT_MS);
-    ch->setMode(FMOD_LOOP_NORMAL);
-    ch->setLoopCount(-1);
-    ch->setPosition(start, FMOD_TIMEUNIT_MS);
+    channel->setMode(FMOD_LOOP_NORMAL);
+    channel->setLoopCount(-1);
+    channel->setPosition(start, FMOD_TIMEUNIT_MS);
 }
 
 [[noreturn]] static void forceQuitNow() {
@@ -89,153 +129,42 @@ static void tryAudioStutter(int loopMs) {
     std::abort();
 }
 
-static void doCrash(int loopMs, int delayMs) {
-    tryAudioStutter(loopMs);
-    std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+static void doCrash() {
+    Mod::get()->saveData();
+    tryAudioStutter(10);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     forceQuitNow();
 }
 
-static void registerObject(TextGameObject* obj) {
-    auto p = parseZpt(obj->m_text);
-    if (!p) return;
-    for (auto& e : g_entries) if (e.object.data() == obj) { e.trigger = *p; return; }
-    g_entries.push_back({obj, *p});
-}
+class $modify(PersistentItemHook, GJEffectManager) {
+    void updateCountForItem(int itemID, int value) {
+        int prev = getItemValue(this, itemID);
+        GJEffectManager::updateCountForItem(itemID, value);
 
-static void clearRuntime() {
-    g_entries.clear();
-    g_fired.clear();
-    g_setupDone = false;
-}
+        if (prev != 0 || value != 1) return;
 
-static void processLoads(PlayLayer* layer) {
-    for (auto const& e : g_entries) {
-        if (e.trigger.kind != ZptKind::Load) continue;
-        auto value = loadValue(e.trigger.saveID);
-        if (value && *value == e.trigger.expected && layer->m_effectManager) {
-            std::vector<int> remap;
-            layer->m_effectManager->spawnGroup(e.trigger.groupID, 0.f, false, remap, 0, 0);
+        auto layer = static_cast<GJBaseGameLayer*>(PlayLayer::get());
+        if (!layer) return;
+
+        if (itemID == SAVE_FLAG_ITEM_ID) {
+            saveItemStates(layer);
+            GJEffectManager::updateCountForItem(SAVE_FLAG_ITEM_ID, 0);
+            layer->updateCounters(SAVE_FLAG_ITEM_ID, 0);
         }
-    }
-}
-
-class $modify(ZptTextGameObject, TextGameObject) {
-    void styleZpt() {
-        auto p = parseZpt(m_text);
-        if (!p) return;
-        m_addToNodeContainer = true;
-        m_detailColor = nullptr;
-        m_isTrigger = true;
-        for (auto child : getChildrenExt()) child->setVisible(false);
-
-        auto bg = CCSprite::createWithSpriteFrameName("GJ_square01.png");
-        if (bg) {
-            bg->setScale(.68f);
-            bg->setOpacity(210);
-            bg->setID("zpt-bg"_spr);
-            addChild(bg, 1);
-            bg->setPosition({0.f, 0.f});
+        else if (itemID == LOAD_FLAG_ITEM_ID) {
+            restoreItemStates(layer);
+            GJEffectManager::updateCountForItem(LOAD_FLAG_ITEM_ID, 0);
+            layer->updateCounters(LOAD_FLAG_ITEM_ID, 0);
         }
-        auto label = CCLabelBMFont::create(zptLabel(*p).c_str(), "bigFont.fnt");
-        label->setScale(.38f);
-        label->setID("zpt-label"_spr);
-        addChild(label, 2);
-        registerObject(this);
-    }
-
-    void customObjectSetup(gd::vector<gd::string>& values, gd::vector<void*>& exists) {
-        TextGameObject::customObjectSetup(values, exists);
-        styleZpt();
-    }
-
-    void updateTextObject(gd::string text, bool p1) {
-        TextGameObject::updateTextObject(text, p1);
-        if (auto old = getChildByIDRecursive("zpt-bg"_spr)) old->removeFromParent();
-        if (auto old = getChildByIDRecursive("zpt-label"_spr)) old->removeFromParent();
-        styleZpt();
+        else if (itemID == CRASH_FLAG_ITEM_ID) {
+            doCrash();
+        }
     }
 };
 
-class $modify(ZptEditorUI, EditorUI) {
-    static CreateMenuItem* labeledBtn(EditorUI* self, int fakeID, char const* text) {
-        auto btn = self->getCreateBtn(1, 4);
-        auto buttonSpr = static_cast<ButtonSprite*>(btn->getNormalImage());
-        if (buttonSpr->m_subSprite) buttonSpr->m_subSprite->setVisible(false);
-        auto lab = CCLabelBMFont::create(text, "bigFont.fnt");
-        lab->setScale(.32f);
-        lab->setPosition({20.f, 20.f});
-        buttonSpr->addChild(lab);
-        btn->m_objectID = fakeID;
-        btn->setTag(fakeID);
-        return btn;
-    }
-
-    void setupCreateMenu() {
-        EditorUI::setupCreateMenu();
-        if (!Mod::get()->getSettingValue<bool>("editor-ui")) return;
-        auto bars = CCArrayExt<EditButtonBar*>(m_createButtonBars);
-        if (bars.size() <= 12) return;
-        auto bar = bars[12];
-        for (auto [id, name] : std::initializer_list<std::pair<int,char const*>>{{SAVE_BUTTON_ID,"SAVE"},{LOAD_BUTTON_ID,"LOAD"},{CRASH_BUTTON_ID,"CRASH"}}) {
-            auto btn = labeledBtn(this, id, name);
-            m_createButtonArray->addObject(btn);
-            bar->m_buttonArray->addObject(btn);
-        }
-        bar->reloadItems(GameManager::get()->getIntGameVariable("0049"), GameManager::get()->getIntGameVariable("0050"));
-    }
-
-    void onCreateObject(int objectID) {
-        if (objectID != SAVE_BUTTON_ID && objectID != LOAD_BUTTON_ID && objectID != CRASH_BUTTON_ID)
-            return EditorUI::onCreateObject(objectID);
-        EditorUI::onCreateObject(914);
-        if (!m_selectedObject) return;
-        auto t = static_cast<TextGameObject*>(m_selectedObject);
-        ZptTrigger z{};
-        if (objectID == SAVE_BUTTON_ID) z.kind = ZptKind::Save;
-        else if (objectID == LOAD_BUTTON_ID) z.kind = ZptKind::Load;
-        else { z.kind = ZptKind::Crash; z.loopMs = 10; z.delayMs = 1000; }
-        t->updateTextObject(encodeZpt(z), false);
-    }
-
-    void editObject(CCObject* sender) {
-        if (m_selectedObject && m_selectedObject->m_objectID == 914) {
-            auto t = static_cast<TextGameObject*>(m_selectedObject);
-            if (parseZpt(t->m_text)) {
-                ZptTriggerPopup::create(t)->show();
-                return;
-            }
-        }
-        EditorUI::editObject(sender);
-    }
-};
-
-class $modify(ZptPlayLayer, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        clearRuntime();
-        return PlayLayer::init(level, useReplay, dontCreateObjects);
-    }
-
+class $modify(PersistentPlayLayer, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
-        g_setupDone = true;
-        processLoads(this);
-    }
-
-    void update(float dt) {
-        PlayLayer::update(dt);
-        if (!g_setupDone || !m_player1) return;
-        float px = m_player1->getPositionX();
-        for (auto const& e : g_entries) {
-            if (!e.object || g_fired.contains(e.object.data())) continue;
-            if (e.trigger.kind == ZptKind::Load) continue;
-            if (px + 2.f < e.object->getPositionX()) continue;
-            g_fired.insert(e.object.data());
-            if (e.trigger.kind == ZptKind::Save) {
-                if (!saveValueSync(e.trigger.saveID, e.trigger.value))
-                    log::error("Persistent Triggers: failed to save ID {}", e.trigger.saveID);
-            } else if (e.trigger.kind == ZptKind::Crash) {
-                doCrash(e.trigger.loopMs, e.trigger.delayMs);
-            }
-        }
+        restoreItemStates(this);
     }
 };
