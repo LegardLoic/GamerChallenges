@@ -1,0 +1,20 @@
+{
+  "geode": "5.10.0",
+  "gd": {
+    "android": "2.2081"
+  },
+  "id": "zeph.persistent-triggers",
+  "name": "Persistent Triggers",
+  "version": "v0.1.0",
+  "developer": "Zeph Studio",
+  "description": "Adds SAVE, LOAD and CRASH pseudo-triggers for persistent horror/meta levels.",
+  "platforms": ["android64"],
+  "settings": {
+    "editor-ui": {
+      "name": "Editor trigger buttons",
+      "description": "Show SAVE / LOAD / CRASH in the trigger tab.",
+      "type": "bool",
+      "default": true
+    }
+  }
+}
