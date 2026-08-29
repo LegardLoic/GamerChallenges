@@ -8,7 +8,6 @@
 #include <Geode/fmod/fmod.hpp>
 #include <filesystem>
 #include <fstream>
-#include <unordered_map>
 #include <unordered_set>
 #include <thread>
 #include <chrono>
@@ -31,45 +30,37 @@ static std::vector<RuntimeEntry> g_entries;
 static std::unordered_set<TextGameObject*> g_fired;
 static bool g_setupDone = false;
 
-static fs::path valuesPath() { return Mod::get()->getSaveDir() / "persistent-values.json"; }
+static fs::path valuePath(int id) {
+    return Mod::get()->getSaveDir() / ("persistent-" + std::to_string(id) + ".txt");
+}
 
-static std::unordered_map<int,int> loadValues() {
-    std::unordered_map<int,int> out;
-    std::ifstream f(valuesPath());
-    if (!f.good()) return out;
-    std::string s((std::istreambuf_iterator<char>(f)), {});
-    auto parsed = matjson::parse(s);
-    if (!parsed) return out;
-    auto obj = parsed.unwrap();
-    if (!obj.isObject()) return out;
-    for (auto const& [k, v] : obj.asObject().unwrap()) {
-        try {
-            if (v.isNumber()) out[std::stoi(k)] = static_cast<int>(v.asInt().unwrap());
-        } catch (...) {}
-    }
-    return out;
+static std::optional<int> loadValue(int id) {
+    std::ifstream f(valuePath(id), std::ios::binary);
+    if (!f.good()) return std::nullopt;
+    int value = 0;
+    f >> value;
+    if (!f.good() && !f.eof()) return std::nullopt;
+    return value;
 }
 
 static bool saveValueSync(int id, int value) {
-    auto all = loadValues();
-    all[id] = value;
-    matjson::Value root = matjson::makeObject({});
-    for (auto const& [k,v] : all) root[std::to_string(k)] = v;
     auto dir = Mod::get()->getSaveDir();
     std::error_code ec;
     fs::create_directories(dir, ec);
-    auto tmp = dir / "persistent-values.json.tmp";
+    if (ec) return false;
+    auto dst = valuePath(id);
+    auto tmp = dst;
+    tmp += ".tmp";
     {
         std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
         if (!f.good()) return false;
-        auto text = root.dump();
-        f.write(text.data(), static_cast<std::streamsize>(text.size()));
+        f << value << "\n";
         f.flush();
         if (!f.good()) return false;
     }
-    fs::remove(valuesPath(), ec);
+    fs::remove(dst, ec);
     ec.clear();
-    fs::rename(tmp, valuesPath(), ec);
+    fs::rename(tmp, dst, ec);
     return !ec;
 }
 
@@ -118,11 +109,10 @@ static void clearRuntime() {
 }
 
 static void processLoads(PlayLayer* layer) {
-    auto vals = loadValues();
     for (auto const& e : g_entries) {
         if (e.trigger.kind != ZptKind::Load) continue;
-        auto it = vals.find(e.trigger.saveID);
-        if (it != vals.end() && it->second == e.trigger.expected && layer->m_effectManager) {
+        auto value = loadValue(e.trigger.saveID);
+        if (value && *value == e.trigger.expected && layer->m_effectManager) {
             std::vector<int> remap;
             layer->m_effectManager->spawnGroup(e.trigger.groupID, 0.f, false, remap, 0, 0);
         }
