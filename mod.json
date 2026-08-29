@@ -5,16 +5,8 @@
   },
   "id": "zeph.persistent-triggers",
   "name": "Persistent Triggers",
-  "version": "v0.1.0",
+  "version": "v0.2.0",
   "developer": "Zeph Studio",
-  "description": "Adds SAVE, LOAD and CRASH pseudo-triggers for persistent horror/meta levels.",
-  "platforms": ["android64"],
-  "settings": {
-    "editor-ui": {
-      "name": "Editor trigger buttons",
-      "description": "Show SAVE / LOAD / CRASH in the trigger tab.",
-      "type": "bool",
-      "default": true
-    }
-  }
+  "description": "GTD2-style persistent Item ID save/load plus a crash control Item ID.",
+  "platforms": ["android64"]
 }
